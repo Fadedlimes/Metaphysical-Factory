@@ -1,0 +1,119 @@
+name: Multi-Platform Build & Package
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch: # Allows manual trigger from GitHub web interface
+
+jobs:
+  build:
+    name: Build on ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows (x64)
+            os: windows-latest
+            platform: windows
+            cmake_args: "-DCMAKE_BUILD_TYPE=Release"
+
+          - name: macOS (Universal M1/M2/M3 + Intel)
+            os: macos-latest
+            platform: macos
+            cmake_args: "-DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+
+          - name: Linux (x64)
+            os: ubuntu-22.04
+            platform: linux
+            cmake_args: "-DCMAKE_BUILD_TYPE=Release"
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Linux Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libx11-dev \
+            libxinerama-dev \
+            libxext-dev \
+            libfreetype6-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libxcursor-dev \
+            libxrandr-dev
+
+      - name: Configure CMake
+        run: cmake -B build ${{ matrix.cmake_args }}
+
+      - name: Build Plugin & Standalone
+        run: cmake --build build --config Release --parallel 4
+
+      # --- Packaging Windows ---
+      - name: Package Windows Artifacts
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p package/VST3 package/Standalone
+          cp -r build/MetaphysicalFactory_artefacts/Release/VST3/* package/VST3/
+          cp -r build/MetaphysicalFactory_artefacts/Release/Standalone/* package/Standalone/
+          cd package && 7z a ../MetaphysicalFactory-Windows.zip *
+
+      # --- Packaging macOS ---
+      - name: Package macOS Artifacts
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p package/VST3 package/Standalone
+          cp -r build/MetaphysicalFactory_artefacts/Release/VST3/* package/VST3/
+          cp -r build/MetaphysicalFactory_artefacts/Release/Standalone/* package/Standalone/
+          cd package && zip -r ../MetaphysicalFactory-macOS.zip *
+
+      # --- Packaging Linux ---
+      - name: Package Linux Artifacts
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p package/VST3 package/Standalone
+          cp -r build/MetaphysicalFactory_artefacts/Release/VST3/* package/VST3/
+          cp -r build/MetaphysicalFactory_artefacts/Release/Standalone/* package/Standalone/
+          tar -czvf MetaphysicalFactory-Linux.tar.gz -C package .
+
+      # --- Upload Workflow Artifacts ---
+      - name: Upload Windows Artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MetaphysicalFactory-Windows
+          path: MetaphysicalFactory-Windows.zip
+
+      - name: Upload macOS Artifact
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MetaphysicalFactory-macOS
+          path: MetaphysicalFactory-macOS.zip
+
+      - name: Upload Linux Artifact
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MetaphysicalFactory-Linux
+          path: MetaphysicalFactory-Linux.tar.gz
+
+      # --- Automatic Release on Tag Push (e.g. git push origin v1.0.0) ---
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            MetaphysicalFactory-*.zip
+            MetaphysicalFactory-*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,7 @@
+cd "/home/Atlin/Metaphysical Factory"
+cat << 'EOF' > .gitignore
+build/
+.cache/
+compile_commands.json
+.DS_Store
+EOF
