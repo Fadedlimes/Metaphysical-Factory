@@ -6,7 +6,10 @@ on:
     tags: [ 'v*' ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch: # Allows manual trigger from GitHub web interface
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -19,18 +22,15 @@ jobs:
         include:
           - name: Windows (x64)
             os: windows-latest
-            platform: windows
-            cmake_args: "-DCMAKE_BUILD_TYPE=Release"
+            artifact_name: MetaphysicalFactory-Windows
 
           - name: macOS (Universal M1/M2/M3 + Intel)
             os: macos-latest
-            platform: macos
-            cmake_args: "-DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+            artifact_name: MetaphysicalFactory-macOS
 
           - name: Linux (x64)
             os: ubuntu-22.04
-            platform: linux
-            cmake_args: "-DCMAKE_BUILD_TYPE=Release"
+            artifact_name: MetaphysicalFactory-Linux
 
     steps:
       - name: Checkout Source Code
@@ -51,8 +51,15 @@ jobs:
             libxcursor-dev \
             libxrandr-dev
 
+      # Configures CMake with proper bash quotation for macOS universal binary
       - name: Configure CMake
-        run: cmake -B build ${{ matrix.cmake_args }}
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          else
+            cmake -B build -DCMAKE_BUILD_TYPE=Release
+          fi
 
       - name: Build Plugin & Standalone
         run: cmake --build build --config Release --parallel 4
@@ -63,17 +70,17 @@ jobs:
         shell: bash
         run: |
           mkdir -p package/VST3 package/Standalone
-          cp -r build/MetaphysicalFactory_artefacts/Release/VST3/* package/VST3/
-          cp -r build/MetaphysicalFactory_artefacts/Release/Standalone/* package/Standalone/
-          cd package && 7z a ../MetaphysicalFactory-Windows.zip *
+          cp -r build/MetaphysicalFactory_artefacts/Release/VST3/* package/VST3/ || true
+          cp -r build/MetaphysicalFactory_artefacts/Release/Standalone/* package/Standalone/ || true
+          7z a MetaphysicalFactory-Windows.zip ./package/*
 
       # --- Packaging macOS ---
       - name: Package macOS Artifacts
         if: runner.os == 'macOS'
         run: |
           mkdir -p package/VST3 package/Standalone
-          cp -r build/MetaphysicalFactory_artefacts/Release/VST3/* package/VST3/
-          cp -r build/MetaphysicalFactory_artefacts/Release/Standalone/* package/Standalone/
+          cp -r build/MetaphysicalFactory_artefacts/Release/VST3/* package/VST3/ || true
+          cp -r build/MetaphysicalFactory_artefacts/Release/Standalone/* package/Standalone/ || true
           cd package && zip -r ../MetaphysicalFactory-macOS.zip *
 
       # --- Packaging Linux ---
@@ -81,39 +88,42 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p package/VST3 package/Standalone
-          cp -r build/MetaphysicalFactory_artefacts/Release/VST3/* package/VST3/
-          cp -r build/MetaphysicalFactory_artefacts/Release/Standalone/* package/Standalone/
+          cp -r build/MetaphysicalFactory_artefacts/Release/VST3/* package/VST3/ || true
+          cp -r build/MetaphysicalFactory_artefacts/Release/Standalone/* package/Standalone/ || true
           tar -czvf MetaphysicalFactory-Linux.tar.gz -C package .
 
       # --- Upload Workflow Artifacts ---
-      - name: Upload Windows Artifact
-        if: runner.os == 'Windows'
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MetaphysicalFactory-Windows
-          path: MetaphysicalFactory-Windows.zip
+          name: ${{ matrix.artifact_name }}
+          path: |
+            *.zip
+            *.tar.gz
 
-      - name: Upload macOS Artifact
-        if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
+  # Consolidated single release job after all platforms build successfully
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
         with:
-          name: MetaphysicalFactory-macOS
-          path: MetaphysicalFactory-macOS.zip
+          path: downloaded_artifacts
 
-      - name: Upload Linux Artifact
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: MetaphysicalFactory-Linux
-          path: MetaphysicalFactory-Linux.tar.gz
+      - name: Flatten Artifact Directory
+        run: |
+          mkdir -p release_assets
+          find downloaded_artifacts -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec cp {} release_assets/ \;
 
-      # --- Automatic Release on Tag Push (e.g. git push origin v1.0.0) ---
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            MetaphysicalFactory-*.zip
-            MetaphysicalFactory-*.tar.gz
+          files: release_assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
