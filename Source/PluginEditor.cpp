@@ -401,34 +401,24 @@ void MetaphysicalFactoryAudioProcessorEditor::layout()
                                                           content.getHeight() - 80 };
     }
 
-    // Sampler / Resochord: two halves of three faders.
+    // Sampler / Resochord: six cells across the content, no extra horizontal padding.
     {
         const auto content = panelContentBounds[2];
-        auto left = content.withWidth (content.getWidth() / 2);
-        auto right = content.withTrimmedLeft (content.getWidth() / 2);
         const int fgap = 2;
-        const int cellW = (left.getWidth() - 2 * fgap) / 3;
-        for (int i = 0; i < 3; ++i)
-            resoSamplerFaderCells[static_cast<size_t>(i)] = { left.getX() + i * (cellW + fgap),
-                                                               left.getY(), cellW, left.getHeight() };
-        for (int i = 0; i < 3; ++i)
-            resoSamplerFaderCells[static_cast<size_t>(3 + i)] = { right.getX() + i * (cellW + fgap),
-                                                                   right.getY(), cellW, right.getHeight() };
+        const int cellW = (content.getWidth() - 5 * fgap) / 6;
+        for (int i = 0; i < 6; ++i)
+            resoSamplerFaderCells[static_cast<size_t>(i)] = { content.getX() + i * (cellW + fgap),
+                                                               content.getY(), cellW, content.getHeight() };
     }
 
-    // Delay / Reverb: two halves of four faders.
+    // Delay / Reverb: eight 54 px cells at 1280, 4 px gaps, no extra horizontal padding.
     {
         const auto content = panelContentBounds[5];
-        auto left = content.withWidth (content.getWidth() / 2);
-        auto right = content.withTrimmedLeft (content.getWidth() / 2);
-        const int fgap = 2;
-        const int cellW = (left.getWidth() - 3 * fgap) / 4;
-        for (int i = 0; i < 4; ++i)
-            effectsFaderCells[static_cast<size_t>(i)] = { left.getX() + i * (cellW + fgap),
-                                                           left.getY(), cellW, left.getHeight() };
-        for (int i = 0; i < 4; ++i)
-            effectsFaderCells[static_cast<size_t>(4 + i)] = { right.getX() + i * (cellW + fgap),
-                                                               right.getY(), cellW, right.getHeight() };
+        const int fgap = 4;
+        const int cellW = (content.getWidth() - 7 * fgap) / 8;
+        for (int i = 0; i < 8; ++i)
+            effectsFaderCells[static_cast<size_t>(i)] = { content.getX() + i * (cellW + fgap),
+                                                           content.getY(), cellW, content.getHeight() };
     }
 }
 
@@ -703,6 +693,29 @@ void MetaphysicalFactoryAudioProcessorEditor::runDebugBoundsReport()
         for (int i = 0; i < 6; ++i)
             checkKnob (fineDialsB[static_cast<size_t>(i)],
                        motionSliders[static_cast<size_t>(6 + i)]->getBounds(), "FINE B" + juce::String (i + 1));
+
+        const char* expectedLabels[] = {
+            "SIN 1", "SIN 2", "SIN 3", "TRI", "PULSE", "LP NOISE",
+            "DUAL NOISE", "SIN 1", "SIN 2", "TRI", "PULSE", "BI-PLS",
+            "CUT A", "RES A", "CUT B", "RES B", "RING", "BAL",
+            "SMP GAIN", "SMP SPD", "SMP TUNE",
+            "RESO TUNE", "RESO DCY", "RESO MIX",
+            "TIME", "RATE", "FDBK", "SPIN",
+            "SIZE", "TAIL", "ABSORB", "SPACE"
+        };
+        bool labelsOk = true;
+        for (int i = 0; i < 32; ++i)
+        {
+            const auto actual = motionSliders[static_cast<size_t>(i)]->getFaderLabelText();
+            if (actual != expectedLabels[i])
+            {
+                std::cout << "  FAIL FADER LABEL " << (i + 1) << ": '" << actual
+                          << "' != '" << expectedLabels[i] << "'" << std::endl;
+                labelsOk = false;
+            }
+        }
+        std::cout << "  FADER LABELS 32 " << (labelsOk ? "PASS" : "FAIL") << std::endl;
+        ok = ok && labelsOk;
 
         std::cout << (ok ? "BOUNDS PASS" : "BOUNDS FAIL") << " " << getWidth() << "x"
                   << getHeight() << std::endl;

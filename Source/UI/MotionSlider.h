@@ -3,7 +3,9 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "../DSP/MotionEngine.h"
-#include "MetaphysicalLookAndFeel.h"
+#include "S116Theme.h"
+#include "SkinManager.h"
+#include "S116Layout.h"
 
 class MotionSlider : public juce::Component,
                      public juce::Timer
@@ -17,16 +19,17 @@ public:
         : motionEngine(engine),
           laneIndex(laneIdx)
     {
-        // 1. Parameter Silkscreen Label (Erica Synths Stencil)
+        // 1. Parameter Silkscreen Label, kit caption style (text remains exactly as passed)
         titleLabel.setText(labelText, juce::dontSendNotification);
-        titleLabel.setJustificationType(juce::Justification::centred);
-        titleLabel.setFont(juce::FontOptions(10.0f, juce::Font::bold));
-        titleLabel.setColour(juce::Label::textColourId, juce::Colour(MetaphysicalLookAndFeel::cSilkscreenWhite));
+        S116::layout::styleCaption(titleLabel);
+        titleLabel.setName("FADER LABEL");
         addAndMakeVisible(titleLabel);
 
-        // 2. Vertical Hardware Fader
+        // 2. Vertical Hardware Fader with the kit fader art
         slider.setSliderStyle(juce::Slider::LinearVertical);
         slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        slider.getProperties().set("s116Fader", true);
+        slider.setName("FADER");
         addAndMakeVisible(slider);
 
         // 3. APVTS Host Automation Attachment
@@ -35,6 +38,8 @@ public:
         // 4. Round Silicone Tactile REC Button
         recButton.setButtonText("REC");
         recButton.setClickingTogglesState(true);
+        recButton.getProperties().set("s116Compact", true);
+        recButton.setName("REC");
         recButton.onClick = [this]()
         {
             motionEngine.setLaneArmed(laneIndex, recButton.getToggleState());
@@ -43,6 +48,8 @@ public:
 
         // 5. Playback Speed Selector Badge (1x, 2x, -1x Reverse, 0.5x Half-Time)
         speedButton.setButtonText("1x");
+        speedButton.getProperties().set("s116Compact", true);
+        speedButton.setName("SPEED");
         speedButton.onClick = [this]()
         {
             currentSpeedStep = (currentSpeedStep + 1) % 4;
@@ -92,13 +99,13 @@ public:
 
     void resized() override
     {
-        auto bounds = getLocalBounds().reduced(2);
+        auto bounds = getLocalBounds();
 
-        titleLabel.setBounds(bounds.removeFromTop(18));
+        titleLabel.setBounds(bounds.removeFromTop(16));
 
-        auto bottomBar = bounds.removeFromBottom(22);
-        recButton.setBounds(bottomBar.removeFromLeft(bottomBar.getWidth() / 2).reduced(1));
-        speedButton.setBounds(bottomBar.reduced(1));
+        auto buttonArea = bounds.removeFromBottom(68);
+        recButton.setBounds(buttonArea.removeFromTop(34));
+        speedButton.setBounds(buttonArea.removeFromTop(34));
 
         bounds.removeFromBottom(4);
         slider.setBounds(bounds);
@@ -106,13 +113,14 @@ public:
 
     void paint(juce::Graphics& g) override
     {
+        const auto& t = S116::skin().theme();
         const auto bounds = getLocalBounds().toFloat();
 
-        // Erica Synths fine wireframe cell border
-        g.setColour(juce::Colour(0x1fffffff));
-        g.drawRoundedRectangle(bounds, 3.0f, 1.0f);
+        // Kit wireframe cell border
+        g.setColour(t.rule.withAlpha(0.55f));
+        g.drawRoundedRectangle(bounds.reduced(0.5f), 3.0f, 1.0f);
 
-        // Playhead Scrubber LED Indicator
+        // Playhead scrubber in the LED colour
         if (motionEngine.isLaneLooping(laneIndex))
         {
             const float progress = motionEngine.getPlayheadProgress(laneIndex);
@@ -121,12 +129,10 @@ public:
                 const auto sliderArea = slider.getBounds().toFloat();
                 const float indicatorY = (sliderArea.getBottom() - 10.0f) - (progress * (sliderArea.getHeight() - 20.0f));
 
-                // Radiant Hot Pink Playhead Pip
-                g.setColour(juce::Colour(MetaphysicalLookAndFeel::cNeonPink).withAlpha(0.35f));
-                g.fillEllipse(sliderArea.getRight() - 6.0f, indicatorY - 4.0f, 8.0f, 8.0f); // Soft outer glow
-
-                g.setColour(juce::Colour(MetaphysicalLookAndFeel::cNeonPink));
-                g.fillEllipse(sliderArea.getRight() - 5.0f, indicatorY - 3.0f, 6.0f, 6.0f); // Bright core
+                g.setColour(t.ledOn.withAlpha(0.35f));
+                g.fillEllipse(sliderArea.getRight() - 6.0f, indicatorY - 4.0f, 8.0f, 8.0f);
+                g.setColour(t.ledOn);
+                g.fillEllipse(sliderArea.getRight() - 5.0f, indicatorY - 3.0f, 6.0f, 6.0f);
             }
         }
     }
@@ -147,13 +153,26 @@ public:
             recButton.setToggleState(motionEngine.isLaneArmed(laneIndex), juce::dontSendNotification);
         }
 
+        // Armed is the toggled LED; recording is the same armed state with a * marker.
+        const bool recording = motionEngine.isLaneRecording(laneIndex);
+        if (recording != lastRecordingState)
+        {
+            recButton.setButtonText(recording ? "REC*" : "REC");
+            lastRecordingState = recording;
+        }
+
         repaint();
     }
+
+public:
+    /** The exact label text passed to the constructor (used by the bounds audit). */
+    juce::String getFaderLabelText() const { return titleLabel.getText(); }
 
 private:
     MotionEngine& motionEngine;
     const int laneIndex;
     int currentSpeedStep { 0 };
+    bool lastRecordingState { false };
 
     juce::Label titleLabel;
     juce::Slider slider;
