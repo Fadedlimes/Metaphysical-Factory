@@ -1,0 +1,7 @@
+add_library(s116_ui INTERFACE)
+target_include_directories(s116_ui INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/fonts/BarlowCondensed-Bold.ttf AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/fonts/ShareTechMono-Regular.ttf)
+    juce_add_binary_data(S116Fonts SOURCES fonts/BarlowCondensed-Bold.ttf fonts/ShareTechMono-Regular.ttf)
+    target_link_libraries(s116_ui INTERFACE S116Fonts)
+    target_compile_definitions(s116_ui INTERFACE S116_HAS_FONTS=1)
+endif()

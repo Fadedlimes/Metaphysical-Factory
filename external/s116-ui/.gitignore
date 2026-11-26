@@ -1,0 +1,8 @@
+build/
+test/build/
+test/out/
+
+*.orig
+
+test/out/
+test/out-lcdcombo/

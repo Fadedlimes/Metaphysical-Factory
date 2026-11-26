@@ -22,6 +22,9 @@ else()
     FetchContent_MakeAvailable(JUCE)
 endif()
 
+# S-116 UI kit (vendored under external/s116-ui, same pattern as Simple116)
+add_subdirectory(external/s116-ui)
+
 # 2. Declare Plugin Target
 juce_add_plugin(MetaphysicalFactory
     COMPANY_NAME "Atlin"
@@ -69,6 +72,7 @@ target_include_directories(MetaphysicalFactory PRIVATE
 
 # 5. Link JUCE Modules
 target_link_libraries(MetaphysicalFactory PRIVATE
+    s116_ui
     juce::juce_audio_utils
     juce::juce_audio_processors
     juce::juce_audio_formats
