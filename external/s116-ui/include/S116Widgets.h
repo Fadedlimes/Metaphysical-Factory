@@ -658,7 +658,7 @@ namespace S116
     class LedButton : public juce::TextButton
     {
     public:
-        explicit LedButton (const juce::String& text, bool toggles = false) : juce::TextButton (text)
+        explicit LedButton (const juce::String& buttonText, bool toggles = false) : juce::TextButton (buttonText)
         { setClickingTogglesState (toggles); }
 
         void attach (APVTS& apvts, const juce::String& paramID)
