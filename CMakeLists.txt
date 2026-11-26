@@ -60,7 +60,6 @@ target_sources(MetaphysicalFactory PRIVATE
     # UI & Aesthetics
     Source/UI/LissajousVisualizer.h
     Source/UI/MotionSlider.h
-    Source/UI/MetaphysicalLookAndFeel.h
 )
 
 # 4. Include Paths
