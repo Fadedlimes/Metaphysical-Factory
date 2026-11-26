@@ -7,6 +7,11 @@
 #include <memory>
 
 #include "PluginProcessor.h"
+#include "SkinManager.h"
+#include "SilverLookAndFeel.h"
+#include "S116Theme.h"
+#include "S116Widgets.h"
+#include "S116Layout.h"
 #include "UI/MetaphysicalLookAndFeel.h"
 #include "UI/LissajousVisualizer.h"
 #include "UI/SampleWaveformDisplay.h"
@@ -22,8 +27,33 @@ public:
     void resized() override;
 
 private:
+    void layout();
+    void runDebugBoundsReport();
+    void collectBounds (juce::Component& parent, const juce::String& name,
+                        bool verbose, bool& ok) const;
+
     MetaphysicalFactoryAudioProcessor& audioProcessor;
-    MetaphysicalLookAndFeel customLookAndFeel;
+    SilverLookAndFeel customLookAndFeel;
+
+    // Compact S-116 section panels
+    S116::SectionPanel bankAPanel { "BANK A: VOICES & FINE TRIM" };
+    S116::SectionPanel telemetryPanel { "CENTRAL TELEMETRY DISPLAYS" };
+    S116::SectionPanel resoSamplerPanel { "TEXTURE SAMPLER & RESOCHORD" };
+    S116::SectionPanel bankBPanel { "BANK B: VOICES & FINE TRIM" };
+    S116::SectionPanel filtersPanel { "TPT FILTERS & OVERDRIVE" };
+    S116::SectionPanel effectsPanel { "DIFFUSION DELAY & SPACE REVERB" };
+
+    // Single-source layout rectangles (computed by layout())
+    juce::Rectangle<int> headerBounds, bodyBounds, logoPlateBounds;
+    std::array<juce::Rectangle<int>, 6> panelBounds {};
+    std::array<juce::Rectangle<int>, 6> panelContentBounds {};
+    std::array<juce::Rectangle<int>, 4> headerKnobCells {};
+    std::array<juce::Rectangle<int>, 3> filterKnobCells {};
+    std::array<std::array<juce::Rectangle<int>, 6>, 2> trimCells {};
+    std::array<std::array<juce::Rectangle<int>, 6>, 2> bankFaderCells {};
+    std::array<juce::Rectangle<int>, 6> filterFaderCells {};
+    std::array<juce::Rectangle<int>, 6> resoSamplerFaderCells {};
+    std::array<juce::Rectangle<int>, 8> effectsFaderCells {};
 
     // Dual Telemetry Screens
     LissajousVisualizer visualizer;
