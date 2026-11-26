@@ -78,6 +78,9 @@ MetaphysicalFactoryAudioProcessorEditor::MetaphysicalFactoryAudioProcessorEditor
     addAndMakeVisible (filtersPanel);
     addAndMakeVisible (effectsPanel);
 
+    samplerResoDivider.setName ("SAMPLER RESO DIVIDER");
+    resoSamplerPanel.addAndMakeVisible (samplerResoDivider);
+
     // Helper to configure responsive, professional vertical-drag rotary dials
     auto configureRotaryDial = [](juce::Slider& slider)
     {
@@ -321,6 +324,13 @@ void MetaphysicalFactoryAudioProcessorEditor::addMotionFader(const juce::String&
     motionSliders.push_back(std::move(fader));
 }
 
+void MetaphysicalFactoryAudioProcessorEditor::Divider::paint (juce::Graphics& g)
+{
+    const auto& t = S116::skin().theme();
+    g.setColour (t.rule);
+    g.fillRect (getLocalBounds());
+}
+
 void MetaphysicalFactoryAudioProcessorEditor::layout()
 {
     auto area = getLocalBounds();
@@ -411,15 +421,22 @@ void MetaphysicalFactoryAudioProcessorEditor::layout()
                                                                content.getY(), cellW, content.getHeight() };
     }
 
-    // Delay / Reverb: eight 54 px cells at 1280, 4 px gaps, no extra horizontal padding.
+    // Delay / Reverb: 55 px cells with 2 px gaps at 1280 (fits inside 460 px).
     {
         const auto content = panelContentBounds[5];
-        const int fgap = 4;
+        const int fgap = 2;
         const int cellW = (content.getWidth() - 7 * fgap) / 8;
+        const int total = 8 * cellW + 7 * fgap;
+        const int pad = (content.getWidth() - total) / 2;
         for (int i = 0; i < 8; ++i)
-            effectsFaderCells[static_cast<size_t>(i)] = { content.getX() + i * (cellW + fgap),
+            effectsFaderCells[static_cast<size_t>(i)] = { content.getX() + pad + i * (cellW + fgap),
                                                            content.getY(), cellW, content.getHeight() };
     }
+
+    // Divider between the 3 sampler and 3 Resochord cells (inside the 2 px gap).
+    samplerResoDividerBounds = { resoSamplerFaderCells[3].getRight(),
+                                 panelContentBounds[2].getY(), 1,
+                                 panelContentBounds[2].getHeight() };
 }
 
 void MetaphysicalFactoryAudioProcessorEditor::paint(juce::Graphics& g)
@@ -563,6 +580,8 @@ void MetaphysicalFactoryAudioProcessorEditor::resized()
     // Sampler / Resochord.
     for (int i = 0; i < 6; ++i)
         motionSliders[static_cast<size_t>(18 + i)]->setBounds (resoSamplerFaderCells[static_cast<size_t>(i)]);
+
+    samplerResoDivider.setBounds (samplerResoDividerBounds);
 
     // Delay / Reverb.
     for (int i = 0; i < 8; ++i)

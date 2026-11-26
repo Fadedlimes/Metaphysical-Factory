@@ -12,7 +12,6 @@
 #include "S116Theme.h"
 #include "S116Widgets.h"
 #include "S116Layout.h"
-#include "UI/MetaphysicalLookAndFeel.h"
 #include "UI/LissajousVisualizer.h"
 #include "UI/SampleWaveformDisplay.h"
 #include "UI/MotionSlider.h"
@@ -43,8 +42,17 @@ private:
     S116::SectionPanel filtersPanel { "TPT FILTERS & OVERDRIVE" };
     S116::SectionPanel effectsPanel { "DIFFUSION DELAY & SPACE REVERB" };
 
+    // A thin divider between sampler and Resochord faders.
+    struct Divider : public juce::Component
+    {
+        Divider() { setInterceptsMouseClicks (false, false); }
+        void paint (juce::Graphics&) override;
+    };
+    Divider samplerResoDivider;
+
     // Single-source layout rectangles (computed by layout())
     juce::Rectangle<int> headerBounds, bodyBounds, logoPlateBounds;
+    juce::Rectangle<int> samplerResoDividerBounds;
     std::array<juce::Rectangle<int>, 6> panelBounds {};
     std::array<juce::Rectangle<int>, 6> panelContentBounds {};
     std::array<juce::Rectangle<int>, 4> headerKnobCells {};
