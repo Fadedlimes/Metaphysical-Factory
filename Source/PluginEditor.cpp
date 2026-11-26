@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 #include "BinaryData.h"
 #include <iostream>
+#include <atomic>
 
 // --- Bridge implementations for decoupled visualizers ---
 
@@ -31,12 +32,15 @@ juce::String SampleWaveformDisplay::getLoadedSampleTitle()
 
 // --- Main Editor Implementation ---
 
+namespace { std::atomic<int> activeEditorInstances { 0 }; }
+
 MetaphysicalFactoryAudioProcessorEditor::MetaphysicalFactoryAudioProcessorEditor(MetaphysicalFactoryAudioProcessor& p)
     : AudioProcessorEditor(&p),
       audioProcessor(p),
       visualizer(p),
       waveformDisplay(p)
 {
+    ++activeEditorInstances;
     setLookAndFeel(&customLookAndFeel);
 
    #if S116_HAS_FONTS
@@ -306,6 +310,9 @@ MetaphysicalFactoryAudioProcessorEditor::MetaphysicalFactoryAudioProcessorEditor
 MetaphysicalFactoryAudioProcessorEditor::~MetaphysicalFactoryAudioProcessorEditor()
 {
     setLookAndFeel(nullptr);
+
+    if (--activeEditorInstances == 0)
+        S116::skin().clearResources();
 }
 
 void MetaphysicalFactoryAudioProcessorEditor::addMotionFader(const juce::String& paramID, const juce::String& label, int laneIndex)

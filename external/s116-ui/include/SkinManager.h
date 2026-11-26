@@ -54,6 +54,15 @@ namespace S116
 
         juce::Colour getLedBaseColour() const { return ledBaseColour; }
 
+        /** Releases the raster/typeface caches while keeping the singleton alive.
+            Call only when the last editor using this skin has been destroyed. */
+        void clearResources()
+        {
+            knobCache.clear();
+            uiTypeface = nullptr;
+            monoTypeface = nullptr;
+        }
+
         void cycleTheme()
         {
             setTheme (static_cast<ThemeId> ((static_cast<int> (id) + 1) % static_cast<int> (ThemeId::numThemes)));
