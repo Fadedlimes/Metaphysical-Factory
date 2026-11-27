@@ -1,4 +1,7 @@
 #include "PluginEditor.h"
+#include "BinaryData.h"
+#include <iostream>
+#include <atomic>
 
 // --- Bridge implementations for decoupled visualizers ---
 
@@ -29,22 +32,70 @@ juce::String SampleWaveformDisplay::getLoadedSampleTitle()
 
 // --- Main Editor Implementation ---
 
+namespace { std::atomic<int> activeEditorInstances { 0 }; }
+
 MetaphysicalFactoryAudioProcessorEditor::MetaphysicalFactoryAudioProcessorEditor(MetaphysicalFactoryAudioProcessor& p)
     : AudioProcessorEditor(&p),
       audioProcessor(p),
       visualizer(p),
       waveformDisplay(p)
 {
+    ++activeEditorInstances;
     setLookAndFeel(&customLookAndFeel);
+
+   #if S116_HAS_FONTS
+    S116::skin().setTypefaces (
+        juce::Typeface::createSystemTypefaceFor (BinaryData::BarlowCondensedBold_ttf,
+                                                 BinaryData::BarlowCondensedBold_ttfSize),
+        juce::Typeface::createSystemTypefaceFor (BinaryData::ShareTechMonoRegular_ttf,
+                                                 BinaryData::ShareTechMonoRegular_ttfSize));
+   #endif
+
+    S116::skin().setTheme (S116::ThemeId::MetaphysicalBlack);
+    S116::skin().setLedColour (juce::Colour (0xffff2a85));
+    customLookAndFeel.applyTheme();
+
+    // Compact panels (24 / 4 / 4) with the current panel titles and subtitles.
+    bankAPanel.setCompactPadding (true);
+    bankAPanel.setSubtitle ("SINE / TRI / BIPOLAR / NOISE");
+    telemetryPanel.setCompactPadding (true);
+    telemetryPanel.setSubtitle ("3D TORUS / LUFS / CORR");
+    resoSamplerPanel.setCompactPadding (true);
+    resoSamplerPanel.setSubtitle ("PARALLEL COMBS");
+    bankBPanel.setCompactPadding (true);
+    bankBPanel.setSubtitle ("DUAL NOISE / SINE / TRI / PULSE");
+    filtersPanel.setCompactPadding (true);
+    filtersPanel.setSubtitle ("HYBRID MORPH / RING MOD");
+    effectsPanel.setCompactPadding (true);
+    effectsPanel.setSubtitle ("FDN 4x4 / SPIN");
+
+    bankAPanel.setName ("BANK A PANEL");
+    telemetryPanel.setName ("TELEMETRY PANEL");
+    resoSamplerPanel.setName ("SAMPLER RESO PANEL");
+    bankBPanel.setName ("BANK B PANEL");
+    filtersPanel.setName ("FILTERS PANEL");
+    effectsPanel.setName ("EFFECTS PANEL");
+    addAndMakeVisible (bankAPanel);
+    addAndMakeVisible (telemetryPanel);
+    addAndMakeVisible (resoSamplerPanel);
+    addAndMakeVisible (bankBPanel);
+    addAndMakeVisible (filtersPanel);
+    addAndMakeVisible (effectsPanel);
+
+    samplerResoDivider.setName ("SAMPLER RESO DIVIDER");
+    resoSamplerPanel.addAndMakeVisible (samplerResoDivider);
 
     // Helper to configure responsive, professional vertical-drag rotary dials
     auto configureRotaryDial = [](juce::Slider& slider)
     {
-        slider.setSliderStyle(juce::Slider::RotaryVerticalDrag); // Standard vertical drag
-        slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-        slider.setMouseDragSensitivity(140);
-        slider.setRotaryParameters(juce::MathConstants<float>::pi * 1.2f, juce::MathConstants<float>::pi * 2.8f, true);
-        slider.setInterceptsMouseClicks(true, false);
+        slider.setSliderStyle (juce::Slider::RotaryVerticalDrag); // Standard vertical drag
+        slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+        slider.setMouseDragSensitivity (140);
+        slider.setRotaryParameters (juce::MathConstants<float>::pi * 1.2f,
+                                    juce::MathConstants<float>::pi * 2.8f, true);
+        slider.setInterceptsMouseClicks (true, false);
+        slider.getProperties().set ("body", 42);
+        slider.getProperties().set ("halo", 11);
     };
 
     // 1. Bind Visualizer's Dual Flat OLED Dials (A+B Level and A x B Level)
@@ -63,10 +114,8 @@ MetaphysicalFactoryAudioProcessorEditor::MetaphysicalFactoryAudioProcessorEditor
         audioProcessor.getAPVTS(), "master_eq_bass", bassDial);
 
     bassLabel.setText("BASS", juce::dontSendNotification);
-    bassLabel.setFont(juce::FontOptions(8.5f, juce::Font::bold));
-    bassLabel.setJustificationType(juce::Justification::centred);
-    bassLabel.setColour(juce::Label::textColourId, juce::Colour(MetaphysicalLookAndFeel::cSilkscreenMuted));
-    bassLabel.setInterceptsMouseClicks(false, false);
+    S116::layout::styleCaption(bassLabel);
+    bassDial.setName ("BASS KNOB"); bassLabel.setName ("BASS LABEL");
     addAndMakeVisible(bassLabel);
 
     configureRotaryDial(trebleDial);
@@ -75,10 +124,8 @@ MetaphysicalFactoryAudioProcessorEditor::MetaphysicalFactoryAudioProcessorEditor
         audioProcessor.getAPVTS(), "master_eq_treble", trebleDial);
 
     trebleLabel.setText("TREBLE", juce::dontSendNotification);
-    trebleLabel.setFont(juce::FontOptions(8.5f, juce::Font::bold));
-    trebleLabel.setJustificationType(juce::Justification::centred);
-    trebleLabel.setColour(juce::Label::textColourId, juce::Colour(MetaphysicalLookAndFeel::cSilkscreenMuted));
-    trebleLabel.setInterceptsMouseClicks(false, false);
+    S116::layout::styleCaption(trebleLabel);
+    trebleDial.setName ("TREBLE KNOB"); trebleLabel.setName ("TREBLE LABEL");
     addAndMakeVisible(trebleLabel);
 
     // 3. Master Hardware Potentiometers with Real-Time Interactive Note Readout
@@ -87,10 +134,8 @@ MetaphysicalFactoryAudioProcessorEditor::MetaphysicalFactoryAudioProcessorEditor
     masterPitchAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "master_pitch", masterPitchDial);
 
-    masterPitchLabel.setFont(juce::FontOptions(8.5f, juce::Font::bold));
-    masterPitchLabel.setJustificationType(juce::Justification::centred);
-    masterPitchLabel.setColour(juce::Label::textColourId, juce::Colour(MetaphysicalLookAndFeel::cNeonPink));
-    masterPitchLabel.setInterceptsMouseClicks(false, false);
+    S116::layout::styleAccent(masterPitchLabel);
+    masterPitchDial.setName ("ROOT KNOB"); masterPitchLabel.setName ("ROOT LABEL");
     addAndMakeVisible(masterPitchLabel);
 
     // Lambda callback: updates note label instantaneously whenever the knob is turned
@@ -108,49 +153,41 @@ MetaphysicalFactoryAudioProcessorEditor::MetaphysicalFactoryAudioProcessorEditor
         audioProcessor.getAPVTS(), "master_volume", masterVolDial);
 
     masterVolLabel.setText("OUTPUT", juce::dontSendNotification);
-    masterVolLabel.setFont(juce::FontOptions(8.5f, juce::Font::bold));
-    masterVolLabel.setJustificationType(juce::Justification::centred);
-    masterVolLabel.setColour(juce::Label::textColourId, juce::Colour(MetaphysicalLookAndFeel::cSilkscreenMuted));
-    masterVolLabel.setInterceptsMouseClicks(false, false);
+    S116::layout::styleCaption(masterVolLabel);
+    masterVolDial.setName ("OUTPUT KNOB"); masterVolLabel.setName ("OUTPUT LABEL");
     addAndMakeVisible(masterVolLabel);
 
     // 4. Overdrive Distortion Potentiometer
     configureRotaryDial(driveDial);
-    addAndMakeVisible(driveDial);
+    filtersPanel.addAndMakeVisible(driveDial);
     driveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "distortion_drive", driveDial);
 
     driveLabel.setText("OVERDRIVE", juce::dontSendNotification);
-    driveLabel.setFont(juce::FontOptions(8.5f, juce::Font::bold));
-    driveLabel.setJustificationType(juce::Justification::centred);
-    driveLabel.setColour(juce::Label::textColourId, juce::Colour(MetaphysicalLookAndFeel::cNeonPink));
-    driveLabel.setInterceptsMouseClicks(false, false);
-    addAndMakeVisible(driveLabel);
+    S116::layout::styleAccent(driveLabel);
+    driveDial.setName ("OVERDRIVE KNOB"); driveLabel.setName ("OVERDRIVE LABEL");
+    filtersPanel.addAndMakeVisible(driveLabel);
 
     // 5. Hybrid Continuous LP/HP Filter Morphs
     configureRotaryDial(morphADial);
-    addAndMakeVisible(morphADial);
+    filtersPanel.addAndMakeVisible(morphADial);
     morphAAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "filter_morph_a", morphADial);
 
     morphALabel.setText("MORPH A", juce::dontSendNotification);
-    morphALabel.setFont(juce::FontOptions(8.5f, juce::Font::bold));
-    morphALabel.setJustificationType(juce::Justification::centred);
-    morphALabel.setColour(juce::Label::textColourId, juce::Colour(MetaphysicalLookAndFeel::cSilkscreenMuted));
-    morphALabel.setInterceptsMouseClicks(false, false);
-    addAndMakeVisible(morphALabel);
+    S116::layout::styleCaption(morphALabel);
+    morphADial.setName ("MORPH A KNOB"); morphALabel.setName ("MORPH A LABEL");
+    filtersPanel.addAndMakeVisible(morphALabel);
 
     configureRotaryDial(morphBDial);
-    addAndMakeVisible(morphBDial);
+    filtersPanel.addAndMakeVisible(morphBDial);
     morphBAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audioProcessor.getAPVTS(), "filter_morph_b", morphBDial);
 
     morphBLabel.setText("MORPH B", juce::dontSendNotification);
-    morphBLabel.setFont(juce::FontOptions(8.5f, juce::Font::bold));
-    morphBLabel.setJustificationType(juce::Justification::centred);
-    morphBLabel.setColour(juce::Label::textColourId, juce::Colour(MetaphysicalLookAndFeel::cSilkscreenMuted));
-    morphBLabel.setInterceptsMouseClicks(false, false);
-    addAndMakeVisible(morphBLabel);
+    S116::layout::styleCaption(morphBLabel);
+    morphBDial.setName ("MORPH B KNOB"); morphBLabel.setName ("MORPH B LABEL");
+    filtersPanel.addAndMakeVisible(morphBLabel);
 
     // 6. Individual Voice Fine-Tune Micro-Knobs (-100 to +100 Cents)
     for (int i = 0; i < 6; ++i)
@@ -158,14 +195,16 @@ MetaphysicalFactoryAudioProcessorEditor::MetaphysicalFactoryAudioProcessorEditor
         // Bank A Fine-Tune
         auto& dialA = fineDialsA[static_cast<size_t>(i)];
         configureRotaryDial(dialA);
-        addAndMakeVisible(dialA);
+        dialA.setName ("FINE A" + juce::String (i + 1));
+        bankAPanel.addAndMakeVisible(dialA);
         fineTuneAttachments.push_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
             audioProcessor.getAPVTS(), "oscA_" + juce::String(i) + "_fine", dialA));
 
         // Bank B Fine-Tune
         auto& dialB = fineDialsB[static_cast<size_t>(i)];
         configureRotaryDial(dialB);
-        addAndMakeVisible(dialB);
+        dialB.setName ("FINE B" + juce::String (i + 1));
+        bankBPanel.addAndMakeVisible(dialB);
         fineTuneAttachments.push_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
             audioProcessor.getAPVTS(), "oscB_" + juce::String(i) + "_fine", dialB));
     }
@@ -193,8 +232,10 @@ MetaphysicalFactoryAudioProcessorEditor::MetaphysicalFactoryAudioProcessorEditor
     };
 
     // 8. Dock Visual Displays
-    addAndMakeVisible(visualizer);
-    addAndMakeVisible(waveformDisplay);
+    visualizer.setName ("LISSAJOUS");
+    waveformDisplay.setName ("WAVEFORM");
+    telemetryPanel.addAndMakeVisible(visualizer);
+    telemetryPanel.addAndMakeVisible(waveformDisplay);
 
     // 9. Populate All 32 Performance Motion Faders with Descriptive, Decoupled Labels
     // Bank A: 3x Sine, 1x Triangle, 1x Bipolar Pulse, 1x LP Filtered Noise
@@ -245,291 +286,469 @@ MetaphysicalFactoryAudioProcessorEditor::MetaphysicalFactoryAudioProcessorEditor
 
     // 10. Strict Initialization Order: setSize() at bottom guarantees populated components
     setResizable(true, true);
-    setResizeLimits(1050, 680, 2560, 1600);
-    setSize(1280, 780);
+    setResizeLimits(1280, 736, 2560, 1600);
+
+    bool debugBounds = false;
+   #if defined(MF_DEBUG_BOUNDS)
+    debugBounds = true;
+   #else
+    debugBounds = juce::SystemStats::getEnvironmentVariable("MF_BOUNDS_LOG", "0") == "1";
+   #endif
+    if (debugBounds)
+    {
+        juce::Component::SafePointer<MetaphysicalFactoryAudioProcessorEditor> safeThis(this);
+        juce::Timer::callAfterDelay(200, [safeThis]
+        {
+            if (safeThis != nullptr)
+                safeThis->runDebugBoundsReport();
+        });
+    }
+
+    setSize(1280, 820);
 }
 
 MetaphysicalFactoryAudioProcessorEditor::~MetaphysicalFactoryAudioProcessorEditor()
 {
     setLookAndFeel(nullptr);
+
+    if (--activeEditorInstances == 0)
+        S116::skin().clearResources();
 }
 
 void MetaphysicalFactoryAudioProcessorEditor::addMotionFader(const juce::String& paramID, const juce::String& label, int laneIndex)
 {
     auto fader = std::make_unique<MotionSlider>(
         audioProcessor.getAPVTS(), paramID, label, audioProcessor.getMotionEngine(), laneIndex);
-    addAndMakeVisible(*fader);
+
+    S116::SectionPanel* parent = &bankAPanel;
+    if (laneIndex >= 6 && laneIndex <= 11)       parent = &bankBPanel;
+    else if (laneIndex >= 12 && laneIndex <= 17) parent = &filtersPanel;
+    else if (laneIndex >= 18 && laneIndex <= 23) parent = &resoSamplerPanel;
+    else if (laneIndex >= 24)                    parent = &effectsPanel;
+
+    fader->setName ("MOTION LANE " + juce::String (laneIndex));
+    parent->addAndMakeVisible(*fader);
     motionSliders.push_back(std::move(fader));
+}
+
+void MetaphysicalFactoryAudioProcessorEditor::Divider::paint (juce::Graphics& g)
+{
+    const auto& t = S116::skin().theme();
+    g.setColour (t.rule);
+    g.fillRect (getLocalBounds());
+}
+
+void MetaphysicalFactoryAudioProcessorEditor::layout()
+{
+    auto area = getLocalBounds();
+    headerBounds = area.removeFromTop(84);
+
+    bodyBounds = area;
+    bodyBounds.removeFromTop(12);
+    bodyBounds.removeFromBottom(16);
+    bodyBounds.removeFromLeft(12);
+    bodyBounds.removeFromRight(12);
+
+    const int gap = 10;
+    const int upperH = static_cast<int>((bodyBounds.getHeight() - gap) * 0.485f);
+    const int lowerH = bodyBounds.getHeight() - gap - upperH;
+    const int contentW = bodyBounds.getWidth() - gap * 2;
+
+    // Minimum widths from the approved Bank/telemetry/filter/effects footprints.
+    const int col1W = static_cast<int>(contentW * (426.0f / 1236.0f));
+    const int col2W = static_cast<int>(contentW * (342.0f / 1236.0f));
+    const int col3W = contentW - col1W - col2W;
+
+    const juce::Rectangle<int> upperRow (bodyBounds.getX(), bodyBounds.getY(), bodyBounds.getWidth(), upperH);
+    const juce::Rectangle<int> lowerRow (bodyBounds.getX(), bodyBounds.getY() + upperH + gap,
+                                         bodyBounds.getWidth(), lowerH);
+
+    panelBounds[0] = { upperRow.getX(), upperRow.getY(), col1W, upperH };
+    panelBounds[1] = { upperRow.getX() + col1W + gap, upperRow.getY(), col2W, upperH };
+    panelBounds[2] = { upperRow.getX() + col1W + gap + col2W + gap, upperRow.getY(), col3W, upperH };
+    panelBounds[3] = { lowerRow.getX(), lowerRow.getY(), col1W, lowerH };
+    panelBounds[4] = { lowerRow.getX() + col1W + gap, lowerRow.getY(), col2W, lowerH };
+    panelBounds[5] = { lowerRow.getX() + col1W + gap + col2W + gap, lowerRow.getY(), col3W, lowerH };
+
+    auto contentOf = [] (juce::Rectangle<int> r)
+    {
+        return r.withTrimmedTop (24).reduced (4, 0).withTrimmedBottom (4);
+    };
+    for (size_t i = 0; i < panelBounds.size(); ++i)
+        panelContentBounds[i] = contentOf ({ 0, 0, panelBounds[i].getWidth(), panelBounds[i].getHeight() });
+
+    // Header: 300 px master block on the right, four 75 px cells.
+    auto headerRight = headerBounds;
+    headerRight.removeFromRight (12);
+    auto masterRight = headerRight.removeFromRight (300);
+    const int headerCellW = masterRight.getWidth() / 4;
+    for (int i = 0; i < 4; ++i)
+        headerKnobCells[static_cast<size_t>(i)] = { masterRight.getX() + i * headerCellW,
+                                                    headerBounds.getY(), headerCellW, headerBounds.getHeight() };
+
+    logoPlateBounds = { 28, headerBounds.getY() + 20, 275, 44 };
+
+    // Bank trims and faders share the same 68 px cells at 1280.
+    for (int bank = 0; bank < 2; ++bank)
+    {
+        const auto content = panelContentBounds[bank == 0 ? 0 : 3];
+        const int fgap = 2;
+        const int cellW = (content.getWidth() - 5 * fgap) / 6;
+        for (int i = 0; i < 6; ++i)
+        {
+            const int x = content.getX() + i * (cellW + fgap);
+            trimCells[static_cast<size_t>(bank)][static_cast<size_t>(i)] = { x, content.getY(), cellW, 64 };
+            bankFaderCells[static_cast<size_t>(bank)][static_cast<size_t>(i)] =
+                { x, content.getY() + 64, cellW, content.getHeight() - 64 };
+        }
+    }
+
+    // Filters: 3 x 64 px knobs in an 80 px row, six faders below.
+    {
+        const auto content = panelContentBounds[4];
+        const int cellW = content.getWidth() / 3;
+        for (int i = 0; i < 3; ++i)
+            filterKnobCells[static_cast<size_t>(i)] = { content.getX() + i * cellW, content.getY(), cellW, 80 };
+
+        const int fgap = 2;
+        const int faderW = (content.getWidth() - 5 * fgap) / 6;
+        for (int i = 0; i < 6; ++i)
+            filterFaderCells[static_cast<size_t>(i)] = { content.getX() + i * (faderW + fgap),
+                                                          content.getY() + 80, faderW,
+                                                          content.getHeight() - 80 };
+    }
+
+    // Sampler / Resochord: six cells across the content, no extra horizontal padding.
+    {
+        const auto content = panelContentBounds[2];
+        const int fgap = 2;
+        const int cellW = (content.getWidth() - 5 * fgap) / 6;
+        for (int i = 0; i < 6; ++i)
+            resoSamplerFaderCells[static_cast<size_t>(i)] = { content.getX() + i * (cellW + fgap),
+                                                               content.getY(), cellW, content.getHeight() };
+    }
+
+    // Delay / Reverb: 55 px cells with 2 px gaps at 1280 (fits inside 460 px).
+    {
+        const auto content = panelContentBounds[5];
+        const int fgap = 2;
+        const int cellW = (content.getWidth() - 7 * fgap) / 8;
+        const int total = 8 * cellW + 7 * fgap;
+        const int pad = (content.getWidth() - total) / 2;
+        for (int i = 0; i < 8; ++i)
+            effectsFaderCells[static_cast<size_t>(i)] = { content.getX() + pad + i * (cellW + fgap),
+                                                           content.getY(), cellW, content.getHeight() };
+    }
+
+    // Divider between the 3 sampler and 3 Resochord cells (inside the 2 px gap).
+    samplerResoDividerBounds = { resoSamplerFaderCells[3].getRight(),
+                                 panelContentBounds[2].getY(), 1,
+                                 panelContentBounds[2].getHeight() };
 }
 
 void MetaphysicalFactoryAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    // 1. True Deep Anodized Matte Black Chassis Background
-    g.fillAll(juce::Colour(MetaphysicalLookAndFeel::cChassisBg));
+    if (panelBounds[0].isEmpty())
+        layout();
 
-    // Corner Screw Rivets
-    auto drawScrew = [&](float x, float y)
+    const auto& t = S116::skin().theme();
+
+    // Matte chassis.
+    g.setGradientFill (juce::ColourGradient (t.chassisTop, 0.0f, 0.0f,
+                                             t.chassisBottom, 0.0f, (float) getHeight(), false));
+    g.fillRect (getLocalBounds());
+
+    // Subtle under-panel shadow, using the single-source panel rectangles.
+    for (const auto& p : panelBounds)
     {
-        g.setColour(juce::Colour(0xff18191e));
-        g.fillEllipse(x - 4.0f, y - 4.0f, 8.0f, 8.0f);
-        g.setColour(juce::Colour(0xff050608));
-        g.fillEllipse(x - 2.0f, y - 2.0f, 4.0f, 4.0f);
-        g.setColour(juce::Colour(0x35ffffff));
-        g.drawEllipse(x - 4.0f, y - 4.0f, 8.0f, 8.0f, 0.8f);
+        g.setColour (juce::Colours::black.withAlpha (0.28f));
+        g.fillRoundedRectangle (p.toFloat().expanded (1.0f), 7.0f);
+    }
+
+    // Header separation rule.
+    g.setColour (t.rule);
+    g.fillRect (12, headerBounds.getBottom() - 1, getWidth() - 24, 1);
+
+    // Corner screws.
+    auto drawScrew = [&] (float x, float y)
+    {
+        g.setColour (t.knobBodyTop.darker (0.55f));
+        g.fillEllipse (x - 4.0f, y - 4.0f, 8.0f, 8.0f);
+        g.setColour (juce::Colour (0xff050608));
+        g.fillEllipse (x - 2.0f, y - 2.0f, 4.0f, 4.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.18f));
+        g.drawEllipse (x - 4.0f, y - 4.0f, 8.0f, 8.0f, 0.8f);
     };
+    drawScrew (8.0f, 8.0f);
+    drawScrew ((float) getWidth() - 8.0f, 8.0f);
+    drawScrew (8.0f, (float) getHeight() - 8.0f);
+    drawScrew ((float) getWidth() - 8.0f, (float) getHeight() - 8.0f);
 
-    drawScrew(8.0f, 8.0f);
-    drawScrew(static_cast<float>(getWidth()) - 8.0f, 8.0f);
-    drawScrew(8.0f, static_cast<float>(getHeight()) - 8.0f);
-    drawScrew(static_cast<float>(getWidth()) - 8.0f, static_cast<float>(getHeight()) - 8.0f);
-
-    // 2. Late 90s / Early 2000s Scaled (+15%) Hardware Vector Emblem
-    const auto logoRect = juce::Rectangle<float>(28.0f, 5.0f, 255.0f, 44.0f);
-
-    // Beveled Parallelogram Metal Nameplate
+    // Custom METAPHYSICAL FACTORY nameplate (not HeaderBar), restyled with kit fonts/tokens.
+    const auto logoRect = logoPlateBounds.toFloat();
     juce::Path nameplatePath;
-    nameplatePath.startNewSubPath(logoRect.getX(), logoRect.getY() + 2.0f);
-    nameplatePath.lineTo(logoRect.getRight() - 12.0f, logoRect.getY() + 2.0f);
-    nameplatePath.lineTo(logoRect.getRight() - 2.0f, logoRect.getBottom() - 2.0f);
-    nameplatePath.lineTo(logoRect.getX() + 10.0f, logoRect.getBottom() - 2.0f);
+    nameplatePath.startNewSubPath (logoRect.getX(), logoRect.getY() + 2.0f);
+    nameplatePath.lineTo (logoRect.getRight() - 12.0f, logoRect.getY() + 2.0f);
+    nameplatePath.lineTo (logoRect.getRight() - 2.0f, logoRect.getBottom() - 2.0f);
+    nameplatePath.lineTo (logoRect.getX() + 10.0f, logoRect.getBottom() - 2.0f);
     nameplatePath.closeSubPath();
 
-    g.setColour(juce::Colour(0xff101216));
-    g.fillPath(nameplatePath);
-    g.setColour(juce::Colour(0xff262933));
-    g.strokePath(nameplatePath, juce::PathStrokeType(1.2f));
+    g.setGradientFill (juce::ColourGradient (t.panelTop, logoRect.getX(), logoRect.getY(),
+                                             t.panelBottom, logoRect.getX(), logoRect.getBottom(), false));
+    g.fillPath (nameplatePath);
+    g.setColour (t.knobRing.withAlpha (0.8f));
+    g.strokePath (nameplatePath, juce::PathStrokeType (1.2f));
 
-    // Power Accent LED Pip
-    g.setColour(juce::Colour(MetaphysicalLookAndFeel::cNeonPink).withAlpha(0.35f));
-    g.fillEllipse(logoRect.getX() + 6.0f, logoRect.getY() + 7.0f, 8.0f, 8.0f);
-    g.setColour(juce::Colour(MetaphysicalLookAndFeel::cNeonPink));
-    g.fillEllipse(logoRect.getX() + 8.0f, logoRect.getY() + 9.0f, 4.0f, 4.0f);
+    // Power LED pip.
+    g.setColour (t.ledOn.withAlpha (0.30f));
+    g.fillEllipse (logoRect.getX() + 6.0f, logoRect.getY() + 7.0f, 8.0f, 8.0f);
+    g.setColour (t.ledOn);
+    g.fillEllipse (logoRect.getX() + 8.0f, logoRect.getY() + 9.0f, 4.0f, 4.0f);
 
-    // Main Logo Typography (16.5f Bold Italic, +15% larger)
-    const auto titleFontOptions = juce::FontOptions(juce::Font::getDefaultSansSerifFontName(), 16.5f, juce::Font::bold | juce::Font::italic);
-    juce::Font titleFont(titleFontOptions);
-    g.setFont(titleFontOptions);
+    const auto titleFont = S116::skin().ui (18.0f, 0.15f);
+    g.setFont (titleFont);
 
     const float startX = logoRect.getX() + 18.0f;
     const float textY  = logoRect.getY() + 5.0f;
+    const float metaWidth = S116::textWidth (titleFont, "METAPHYSICAL ");
 
-    // Exact string measurement guarantees "FACTORY" sits directly beside "METAPHYSICAL"
-    const float metaTextWidth = titleFont.getStringWidthFloat("METAPHYSICAL ");
+    g.setColour (juce::Colours::black);
+    g.drawText ("METAPHYSICAL", startX + 1.0f, textY + 1.0f, metaWidth + 4.0f, 20.0f,
+                juce::Justification::left, false);
 
-    // "METAPHYSICAL" Drop-shadow
-    g.setColour(juce::Colours::black);
-    g.drawText("METAPHYSICAL", startX + 1.0f, textY + 1.0f, metaTextWidth + 4.0f, 20.0f, juce::Justification::left, false);
+    g.setGradientFill (juce::ColourGradient (t.heading, startX, textY,
+                                             t.caption, startX, textY + 20.0f, false));
+    g.drawText ("METAPHYSICAL", startX, textY, metaWidth + 4.0f, 20.0f,
+                juce::Justification::left, false);
 
-    // "METAPHYSICAL" Chrome Gradient Face
-    juce::ColourGradient chromeGrad(juce::Colour(0xffffffff), startX, textY,
-                                    juce::Colour(0xff949aa8), startX, textY + 20.0f, false);
-    g.setGradientFill(chromeGrad);
-    g.drawText("METAPHYSICAL", startX, textY, metaTextWidth + 4.0f, 20.0f, juce::Justification::left, false);
+    const float factoryX = startX + metaWidth;
+    g.setColour (juce::Colours::black);
+    g.drawText ("FACTORY", factoryX + 1.0f, textY + 1.0f, 110.0f, 20.0f,
+                juce::Justification::left, false);
+    g.setColour (t.logoAccent);
+    g.drawText ("FACTORY", factoryX, textY, 110.0f, 20.0f,
+                juce::Justification::left, false);
 
-    // "FACTORY" in seamless Hot Neon Pink (Identical size, zero intrusive box)
-    const float factoryX = startX + metaTextWidth;
-    g.setColour(juce::Colours::black);
-    g.drawText("FACTORY", factoryX + 1.0f, textY + 1.0f, 100.0f, 20.0f, juce::Justification::left, false);
-
-    g.setColour(juce::Colour(MetaphysicalLookAndFeel::cNeonPink));
-    g.drawText("FACTORY", factoryX, textY, 100.0f, 20.0f, juce::Justification::left, false);
-
-    // Hardware Sub-Telemetry Stencil (+15% larger: 9.5f bold, completely legible)
-    g.setFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 9.5f, juce::Font::bold));
-    g.setColour(juce::Colour(MetaphysicalLookAndFeel::cSilkscreenWhite).withAlpha(0.75f));
-    g.drawText("AMBIENT DREAMSCAPE SYNTHESIS", startX, logoRect.getY() + 26.0f, 230.0f, 14.0f, juce::Justification::left, false);
-
-    // 3. Hardware Rack Box Drawing Helper
-    auto drawHardwareRack = [&](const juce::Rectangle<int>& area, const juce::String& title, const juce::String& sub)
-    {
-        const auto fArea = area.toFloat();
-
-        g.setColour(juce::Colour(MetaphysicalLookAndFeel::cWellBg));
-        g.fillRoundedRectangle(fArea, 4.0f);
-
-        g.setColour(juce::Colour(MetaphysicalLookAndFeel::cPanelBorder));
-        g.drawRoundedRectangle(fArea, 4.0f, 1.0f);
-
-        // Header silkscreen badge
-        g.setColour(juce::Colour(MetaphysicalLookAndFeel::cSilkscreenWhite));
-        g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
-        g.drawText(title, area.getX() + 8, area.getY() + 4, area.getWidth() - 16, 14, juce::Justification::left);
-
-        if (sub.isNotEmpty() && area.getWidth() > 240)
-        {
-            g.setColour(juce::Colour(MetaphysicalLookAndFeel::cSilkscreenMuted));
-            g.setFont(juce::FontOptions(8.5f, juce::Font::plain));
-            g.drawText(sub, area.getX() + 8, area.getY() + 4, area.getWidth() - 16, 14, juce::Justification::right);
-        }
-    };
-
-    // Calculate dynamic responsive layout areas matching resized()
-    auto bounds = getLocalBounds();
-    bounds.removeFromTop(54); // Header
-    const int margin = 12;
-    const int gap = 10;
-    auto body = bounds.reduced(margin, margin);
-
-    const int upperH = static_cast<int>((body.getHeight() - gap) * 0.485f);
-    const int lowerH = body.getHeight() - gap - upperH;
-
-    auto upperRow = body.removeFromTop(upperH);
-    body.removeFromTop(gap);
-    auto lowerRow = body;
-
-    const int col1W = static_cast<int>((upperRow.getWidth() - (gap * 2)) * 0.285f);
-    const int col2W = col1W;
-    const int col3W = upperRow.getWidth() - (gap * 2) - col1W - col2W;
-
-    // Draw Upper Decks
-    drawHardwareRack(upperRow.removeFromLeft(col1W), "BANK A: VOICES & FINE TRIM", "SINE / TRI / BIPOLAR / NOISE");
-    upperRow.removeFromLeft(gap);
-    drawHardwareRack(upperRow.removeFromLeft(col2W), "CENTRAL TELEMETRY DISPLAYS", "3D TORUS / LUFS / CORR");
-    upperRow.removeFromLeft(gap);
-    drawHardwareRack(upperRow, "TEXTURE SAMPLER & RESOCHORD", "PARALLEL COMBS");
-
-    // Draw Lower Decks
-    drawHardwareRack(lowerRow.removeFromLeft(col1W), "BANK B: VOICES & FINE TRIM", "DUAL NOISE / SINE / TRI / PULSE");
-    lowerRow.removeFromLeft(gap);
-    drawHardwareRack(lowerRow.removeFromLeft(col2W), "TPT FILTERS & OVERDRIVE", "HYBRID MORPH / RING MOD");
-    lowerRow.removeFromLeft(gap);
-    drawHardwareRack(lowerRow, "DIFFUSION DELAY & SPACE REVERB", "FDN 4x4 / SPIN");
+    g.setFont (S116::skin().mono (9.5f));
+    g.setColour (t.caption.withAlpha (0.80f));
+    g.drawText ("AMBIENT DREAMSCAPE SYNTHESIS", startX, logoRect.getY() + 26.0f, 240.0f, 14.0f,
+                juce::Justification::left, false);
 }
 
 void MetaphysicalFactoryAudioProcessorEditor::resized()
 {
-    auto bounds = getLocalBounds();
+    layout();
 
-    // 1. Top Header Bar (Height 54)
-    auto header = bounds.removeFromTop(54);
-    header.removeFromLeft(295); // Clearance for the enlarged vector emblem badge
+    bankAPanel.setBounds (panelBounds[0]);
+    telemetryPanel.setBounds (panelBounds[1]);
+    resoSamplerPanel.setBounds (panelBounds[2]);
+    bankBPanel.setBounds (panelBounds[3]);
+    filtersPanel.setBounds (panelBounds[4]);
+    effectsPanel.setBounds (panelBounds[5]);
 
-    // Master Tone EQ & Output Potentiometers (Far Right Deck)
-    auto masterRight = header.removeFromRight(300);
-    const int dialW = masterRight.getWidth() / 4;
-
-    auto bassArea = masterRight.removeFromLeft(dialW);
-    bassDial.setBounds(bassArea.getCentreX() - 15, 3, 30, 30);
-    bassLabel.setBounds(bassArea.getX(), 37, bassArea.getWidth(), 13);
-
-    auto trebleArea = masterRight.removeFromLeft(dialW);
-    trebleDial.setBounds(trebleArea.getCentreX() - 15, 3, 30, 30);
-    trebleLabel.setBounds(trebleArea.getX(), 37, trebleArea.getWidth(), 13);
-
-    auto pitchArea = masterRight.removeFromLeft(dialW);
-    masterPitchDial.setBounds(pitchArea.getCentreX() - 15, 3, 30, 30);
-    masterPitchLabel.setBounds(pitchArea.getX() - 8, 37, pitchArea.getWidth() + 16, 13);
-
-    auto volArea = masterRight;
-    masterVolDial.setBounds(volArea.getCentreX() - 15, 3, 30, 30);
-    masterVolLabel.setBounds(volArea.getX(), 37, volArea.getWidth(), 13);
-
-    // Helper to position faders evenly within an area
-    auto layoutFaders = [this](int startLane, int count, juce::Rectangle<int> area)
+    auto setHeaderKnob = [] (juce::Slider& slider, juce::Label& label, juce::Rectangle<int> cell)
     {
-        if (count <= 0) return;
-        const int faderWidth = area.getWidth() / count;
-        for (int i = 0; i < count; ++i)
+        slider.setBounds (cell.getCentreX() - 32, cell.getY() + 2, 64, 64);
+        label.setBounds (cell.getX(), cell.getY() + 66, cell.getWidth(), 16);
+    };
+    setHeaderKnob (bassDial, bassLabel, headerKnobCells[0]);
+    setHeaderKnob (trebleDial, trebleLabel, headerKnobCells[1]);
+    setHeaderKnob (masterPitchDial, masterPitchLabel, headerKnobCells[2]);
+    setHeaderKnob (masterVolDial, masterVolLabel, headerKnobCells[3]);
+
+    // Bank A/B trims and faders.
+    for (int i = 0; i < 6; ++i)
+        S116::layout::placeBareKnob (fineDialsA[static_cast<size_t>(i)],
+                                     trimCells[0][static_cast<size_t>(i)].getX(),
+                                     trimCells[0][static_cast<size_t>(i)].getY(),
+                                     trimCells[0][static_cast<size_t>(i)].getWidth(), 42);
+    for (int i = 0; i < 6; ++i)
+        S116::layout::placeBareKnob (fineDialsB[static_cast<size_t>(i)],
+                                     trimCells[1][static_cast<size_t>(i)].getX(),
+                                     trimCells[1][static_cast<size_t>(i)].getY(),
+                                     trimCells[1][static_cast<size_t>(i)].getWidth(), 42);
+    for (int i = 0; i < 6; ++i)
+        motionSliders[static_cast<size_t>(i)]->setBounds (bankFaderCells[0][static_cast<size_t>(i)]);
+    for (int i = 0; i < 6; ++i)
+        motionSliders[static_cast<size_t>(6 + i)]->setBounds (bankFaderCells[1][static_cast<size_t>(i)]);
+
+    // Filters.
+    auto setFilterKnob = [] (juce::Slider& slider, juce::Label& label, juce::Rectangle<int> cell)
+    {
+        slider.setBounds (cell.getCentreX() - 32, cell.getY(), 64, 64);
+        label.setBounds (cell.getX(), cell.getY() + 64, cell.getWidth(), 16);
+    };
+    setFilterKnob (morphADial, morphALabel, filterKnobCells[0]);
+    setFilterKnob (driveDial, driveLabel, filterKnobCells[1]);
+    setFilterKnob (morphBDial, morphBLabel, filterKnobCells[2]);
+    for (int i = 0; i < 6; ++i)
+        motionSliders[static_cast<size_t>(12 + i)]->setBounds (filterFaderCells[static_cast<size_t>(i)]);
+
+    // Sampler / Resochord.
+    for (int i = 0; i < 6; ++i)
+        motionSliders[static_cast<size_t>(18 + i)]->setBounds (resoSamplerFaderCells[static_cast<size_t>(i)]);
+
+    samplerResoDivider.setBounds (samplerResoDividerBounds);
+
+    // Delay / Reverb.
+    for (int i = 0; i < 8; ++i)
+        motionSliders[static_cast<size_t>(24 + i)]->setBounds (effectsFaderCells[static_cast<size_t>(i)]);
+
+    // Telemetry.
+    auto telemetry = panelContentBounds[1];
+    const int halfTelemetryH = (telemetry.getHeight() - 6) / 2;
+    visualizer.setBounds (telemetry.removeFromTop (halfTelemetryH));
+    telemetry.removeFromTop (6);
+    waveformDisplay.setBounds (telemetry);
+}
+
+void MetaphysicalFactoryAudioProcessorEditor::collectBounds (juce::Component& parent,
+                                                              const juce::String& name,
+                                                              bool verbose, bool& ok) const
+{
+    const auto& kids = parent.getChildren();
+    const auto parentBounds = parent.getLocalBounds();
+
+    if (verbose)
+        std::cout << "  " << name << " " << parentBounds.getWidth() << "x"
+                  << parentBounds.getHeight() << std::endl;
+
+    for (int i = 0; i < kids.size(); ++i)
+    {
+        auto* c = kids[i];
+        const auto b = c->getBounds();
+        const bool isResizeGrip = dynamic_cast<juce::ResizableCornerComponent*> (c) != nullptr;
+        const auto childName = c->getName().isNotEmpty()
+                                   ? c->getName()
+                                   : (isResizeGrip ? juce::String ("RESIZE GRIP")
+                                                   : juce::String ("child ") + juce::String (i));
+
+        if (! parentBounds.contains (b))
         {
-            const int lane = startLane + i;
-            if (lane < static_cast<int>(motionSliders.size()))
+            std::cout << "  FAIL " << name << " / " << childName
+                      << " leaves parent: " << b.toString() << std::endl;
+            ok = false;
+        }
+
+        if (auto* label = dynamic_cast<juce::Label*> (c))
+        {
+            float size = 13.0f, kerning = 0.085f;
+            const auto style = label->getProperties().getWithDefault ("style", "caption").toString();
+            if (style == "field" || style == "sub") { size = 12.0f; kerning = 0.10f; }
+            else if (style == "accent")
             {
-                motionSliders[lane]->setBounds(area.getX() + (i * faderWidth), area.getY(), faderWidth, area.getHeight());
+                size = (float) (double) label->getProperties().getWithDefault ("captionSize", 13.0);
+                kerning = 0.085f;
+            }
+            const auto tw = S116::textWidth (S116::skin().ui (size, kerning), label->getText());
+            if (tw > (float) label->getWidth() + 0.5f)
+            {
+                std::cout << "  FAIL " << name << " / " << childName << " label width "
+                          << tw << " > " << label->getWidth() << " (" << label->getText() << ")"
+                          << std::endl;
+                ok = false;
             }
         }
-    };
 
-    // 2. Responsive 3-Column Grid Layout
-    const int margin = 12;
-    const int gap = 10;
-    auto body = bounds.reduced(margin, margin);
+        for (int j = i + 1; j < kids.size(); ++j)
+        {
+            const bool otherIsGrip = dynamic_cast<juce::ResizableCornerComponent*> (kids[j]) != nullptr;
+            const bool panelPair = (isResizeGrip && dynamic_cast<S116::SectionPanel*> (kids[j]) != nullptr)
+                                || (otherIsGrip && dynamic_cast<S116::SectionPanel*> (c) != nullptr);
 
-    const int upperH = static_cast<int>((body.getHeight() - gap) * 0.485f);
-    const int lowerH = body.getHeight() - gap - upperH;
+            if (! panelPair && b.intersects (kids[j]->getBounds()))
+            {
+                std::cout << "  FAIL " << name << " / " << childName
+                          << " overlaps " << (kids[j]->getName().isNotEmpty()
+                                                  ? kids[j]->getName()
+                                                  : juce::String ("child ") + juce::String (j))
+                          << " " << b.toString() << " vs " << kids[j]->getBounds().toString()
+                          << std::endl;
+                ok = false;
+            }
+        }
 
-    auto upperRow = body.removeFromTop(upperH);
-    body.removeFromTop(gap);
-    auto lowerRow = body;
+        if (verbose)
+            std::cout << "    " << childName << " " << b.toString() << std::endl;
 
-    const int col1W = static_cast<int>((upperRow.getWidth() - (gap * 2)) * 0.285f);
-    const int col2W = col1W;
-    const int col3W = upperRow.getWidth() - (gap * 2) - col1W - col2W;
-
-    auto deckBankA        = upperRow.removeFromLeft(col1W);
-    upperRow.removeFromLeft(gap);
-    auto deckTelemetry    = upperRow.removeFromLeft(col2W);
-    upperRow.removeFromLeft(gap);
-    auto deckResoSampler  = upperRow;
-
-    auto deckBankB        = lowerRow.removeFromLeft(col1W);
-    lowerRow.removeFromLeft(gap);
-    auto deckFilters      = lowerRow.removeFromLeft(col2W);
-    lowerRow.removeFromLeft(gap);
-    auto deckEffects      = lowerRow;
-
-    // 3. Position Bank A (Top Fine-Tune Trimmers + Main Faders)
-    deckBankA.removeFromTop(20);
-    deckBankA.reduce(4, 4);
-    auto trimAreaA = deckBankA.removeFromTop(32);
-    const int trimWidthA = trimAreaA.getWidth() / 6;
-    for (int i = 0; i < 6; ++i)
-    {
-        fineDialsA[static_cast<size_t>(i)].setBounds(trimAreaA.getX() + (i * trimWidthA) + (trimWidthA / 2 - 12),
-                                                     trimAreaA.getY(), 24, 24);
+        collectBounds (*c, childName, verbose, ok);
     }
-    layoutFaders(0, 6, deckBankA);
+}
 
-    // 4. Position Bank B (Top Fine-Tune Trimmers + Main Faders)
-    deckBankB.removeFromTop(20);
-    deckBankB.reduce(4, 4);
-    auto trimAreaB = deckBankB.removeFromTop(32);
-    const int trimWidthB = trimAreaB.getWidth() / 6;
-    for (int i = 0; i < 6; ++i)
+void MetaphysicalFactoryAudioProcessorEditor::runDebugBoundsReport()
+{
+    const int savedW = getWidth(), savedH = getHeight();
+    const std::array<juce::Point<int>, 3> sizes { juce::Point<int> (1280, 736),
+                                                  juce::Point<int> (1280, 820),
+                                                  juce::Point<int> (2560, 1600) };
+
+    bool allOk = true;
+    for (const auto& size : sizes)
     {
-        fineDialsB[static_cast<size_t>(i)].setBounds(trimAreaB.getX() + (i * trimWidthB) + (trimWidthB / 2 - 12),
-                                                     trimAreaB.getY(), 24, 24);
+        setSize (size.x, size.y);
+        std::cout << "\n=== BOUNDS " << getWidth() << "x" << getHeight() << " ===" << std::endl;
+
+        bool ok = true;
+        collectBounds (*this, "EDITOR", true, ok);
+
+        auto checkKnob = [&] (juce::Slider& slider, juce::Rectangle<int> cell, const juce::String& label)
+        {
+            const int a = slider.getBounds().getCentreX();
+            const int b = cell.getCentreX();
+            if (a != b)
+            {
+                std::cout << "  FAIL KNOB CENTRE " << label << ": " << a << " vs " << b << std::endl;
+                ok = false;
+            }
+            else
+            {
+                std::cout << "  KNOB CENTRE " << label << ": " << a << " == " << b << " PASS" << std::endl;
+            }
+        };
+
+        checkKnob (bassDial, headerKnobCells[0], "BASS");
+        checkKnob (trebleDial, headerKnobCells[1], "TREBLE");
+        checkKnob (masterPitchDial, headerKnobCells[2], "ROOT");
+        checkKnob (masterVolDial, headerKnobCells[3], "OUTPUT");
+        checkKnob (morphADial, filterKnobCells[0], "MORPH A");
+        checkKnob (driveDial, filterKnobCells[1], "OVERDRIVE");
+        checkKnob (morphBDial, filterKnobCells[2], "MORPH B");
+        for (int i = 0; i < 6; ++i)
+            checkKnob (fineDialsA[static_cast<size_t>(i)],
+                       motionSliders[static_cast<size_t>(i)]->getBounds(), "FINE A" + juce::String (i + 1));
+        for (int i = 0; i < 6; ++i)
+            checkKnob (fineDialsB[static_cast<size_t>(i)],
+                       motionSliders[static_cast<size_t>(6 + i)]->getBounds(), "FINE B" + juce::String (i + 1));
+
+        const char* expectedLabels[] = {
+            "SIN 1", "SIN 2", "SIN 3", "TRI", "PULSE", "LP NOISE",
+            "DUAL NOISE", "SIN 1", "SIN 2", "TRI", "PULSE", "BI-PLS",
+            "CUT A", "RES A", "CUT B", "RES B", "RING", "BAL",
+            "SMP GAIN", "SMP SPD", "SMP TUNE",
+            "RESO TUNE", "RESO DCY", "RESO MIX",
+            "TIME", "RATE", "FDBK", "SPIN",
+            "SIZE", "TAIL", "ABSORB", "SPACE"
+        };
+        bool labelsOk = true;
+        for (int i = 0; i < 32; ++i)
+        {
+            const auto actual = motionSliders[static_cast<size_t>(i)]->getFaderLabelText();
+            if (actual != expectedLabels[i])
+            {
+                std::cout << "  FAIL FADER LABEL " << (i + 1) << ": '" << actual
+                          << "' != '" << expectedLabels[i] << "'" << std::endl;
+                labelsOk = false;
+            }
+        }
+        std::cout << "  FADER LABELS 32 " << (labelsOk ? "PASS" : "FAIL") << std::endl;
+        ok = ok && labelsOk;
+
+        std::cout << (ok ? "BOUNDS PASS" : "BOUNDS FAIL") << " " << getWidth() << "x"
+                  << getHeight() << std::endl;
+        jassert (ok);
+        allOk = allOk && ok;
     }
-    layoutFaders(6, 6, deckBankB);
 
-    // 5. Position Dual Telemetry Screens
-    deckTelemetry.removeFromTop(20);
-    deckTelemetry.reduce(6, 6);
-    const int halfTelemetryH = (deckTelemetry.getHeight() - 6) / 2;
-    visualizer.setBounds(deckTelemetry.removeFromTop(halfTelemetryH));
-    deckTelemetry.removeFromTop(6);
-    waveformDisplay.setBounds(deckTelemetry);
-
-    // 6. Position Filters, Morphs & Overdrive
-    deckFilters.removeFromTop(20);
-    deckFilters.reduce(4, 4);
-    auto filterControls = deckFilters.removeFromTop(44);
-    const int subCol = filterControls.getWidth() / 3;
-
-    auto morphAreaA = filterControls.removeFromLeft(subCol);
-    morphADial.setBounds(morphAreaA.getCentreX() - 14, morphAreaA.getY(), 28, 28);
-    morphALabel.setBounds(morphAreaA.getX(), morphAreaA.getY() + 29, morphAreaA.getWidth(), 12);
-
-    auto driveArea = filterControls.removeFromLeft(subCol);
-    driveDial.setBounds(driveArea.getCentreX() - 14, driveArea.getY(), 28, 28);
-    driveLabel.setBounds(driveArea.getX(), driveArea.getY() + 29, driveArea.getWidth(), 12);
-
-    auto morphAreaB = filterControls;
-    morphBDial.setBounds(morphAreaB.getCentreX() - 14, morphAreaB.getY(), 28, 28);
-    morphBLabel.setBounds(morphAreaB.getX(), morphAreaB.getY() + 29, morphAreaB.getWidth(), 12);
-
-    layoutFaders(12, 6, deckFilters);
-
-    // 7. Position Sampler & Resochord (3 Sampler Faders on Left, 3 Resochord Faders on Right)
-    deckResoSampler.removeFromTop(20);
-    deckResoSampler.reduce(4, 4);
-    const int splitUpper = deckResoSampler.getWidth() / 2;
-    layoutFaders(18, 3, deckResoSampler.removeFromLeft(splitUpper)); // Sampler: GAIN, SPD, TUNE (Lanes 18 - 20)
-    layoutFaders(21, 3, deckResoSampler);                           // Resochord: TUNE, DCY, MIX (Lanes 21 - 23)
-
-    // 8. Position Spin Delay & Space Reverb
-    deckEffects.removeFromTop(20);
-    deckEffects.reduce(4, 4);
-    const int splitLower = deckEffects.getWidth() / 2;
-    layoutFaders(24, 4, deckEffects.removeFromLeft(splitLower));     // Spin Delay (Lanes 24 - 27)
-    layoutFaders(28, 4, deckEffects);                               // Space Reverb (Lanes 28 - 31)
+    setSize (savedW, savedH);
+    jassert (allOk);
 }
